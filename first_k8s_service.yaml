@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-ui-deployment
+  labels:
+    env: test
+    app: flask-ui-deployment
+    owner: RomanNikitin
+spec:
+  selector:
+    matchLabels:
+      project: first_k8s_pod # Selecting POD with this label (selector.matchLabels.project==template.template.project)
+  template:
+    metadata:
+      labels:
+        project: first_k8s_pod # Selecting Deployment with this label (selector.matchLabels.project==template.template.project)
+    spec:
+      containers:
+        - name: container-api
+          image: leni55/self-learning_ui:latest
+          ports:
+            - containerPort: 5000
+---
+---
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  labels:
+    app: flask-ui-deployment
+  name: autoscaling-flask-ui-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: flask-ui-deployment # AutoScaling take Deployment with this name 
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-ui-service
+  labels:
+     env  : test
+     owner: RomanNikitin
+spec:
+  selector:
+    project: first_k8s_pod      # Selecting PODs with this label
+  ports:
+    - name      : flask-ui-listener
+      protocol  : TCP
+      nodePort  : 32500 # Port on Node 
+      port      : 5000  # Port in Service for NodePort
+      targetPort: 5000  # Port on Pod
+  type: NodePort        # POD:5000 <= SERVICE:5000 <= (EXTERNAL_NODE:32500(NodePortType))/INGRESS:5000 <= self-learning-predictor.ru
+---
+---
+---
+#kubectl apply -f https://projectcontour.io/quickstart/contour.yaml - Link for Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: main-ingress
+spec:
+  rules:
+   - host: self-learning-predictor.ru
+     http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: flask-ui-service
+                port: 
+                  number: 5000
